@@ -31,6 +31,7 @@ jobs:
           yarn --version
 
       - name: Verify yarn.lock exists and is valid
+        shell: pwsh
         run: |
           if (Test-Path "yarn.lock") {
             $lockfileSize = (Get-Item "yarn.lock").Length
@@ -44,7 +45,6 @@ jobs:
             Write-Host "ERROR: yarn.lock not found. Please run the 'Generate yarn.lock' workflow first."
             exit 1
           }
-        shell: pwsh
 
       - name: Get yarn cache directory path
         id: yarn-cache-dir-path
@@ -66,20 +66,30 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=8192
 
+      # ================== FIX STARTS HERE ==================
       - name: Build Windows (official method)
+        shell: pwsh
         run: |
+          Write-Host "Temporarily disabling Microsoft Defender real-time monitoring to prevent build interference..."
+          Set-MpPreference -DisableRealtimeMonitoring $true
+          
+          Write-Host "Running the build commands..."
           yarn build:npm windows
           yarn build:win
+          
+          Write-Host "Re-enabling Microsoft Defender real-time monitoring..."
+          Set-MpPreference -DisableRealtimeMonitoring $false
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NODE_OPTIONS: --max-old-space-size=8192
+      # =================== FIX ENDS HERE ===================
 
       - name: Generate timestamp
         id: timestamp
+        shell: pwsh
         run: |
           $timestamp = Get-Date -Format "yyyyMMdd-HHmm"
           echo "timestamp=$timestamp" >> $env:GITHUB_OUTPUT
-        shell: pwsh
 
       - name: List build output
         shell: pwsh
