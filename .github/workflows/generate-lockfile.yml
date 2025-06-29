@@ -1,0 +1,62 @@
+name: Generate yarn.lock for Cherry Studio
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install corepack and setup yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@4.6.0 --activate
+          yarn --version
+
+      - name: Remove empty yarn.lock
+        run: |
+          echo "Current yarn.lock size: $(wc -c < yarn.lock) bytes"
+          rm -f yarn.lock
+          echo "Empty yarn.lock removed"
+
+      - name: Generate yarn.lock for workspaces (non-CI environment)
+        run: |
+          # Temporarily disable CI detection to allow lockfile generation
+          unset CI
+          unset GITHUB_ACTIONS
+          export CI=false
+          yarn install
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+
+      - name: Verify generated yarn.lock
+        run: |
+          echo "Generated yarn.lock size: $(wc -c < yarn.lock) bytes"
+          echo "First 10 lines of yarn.lock:"
+          head -10 yarn.lock
+
+      - name: Commit and push yarn.lock
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add yarn.lock
+          git commit -m "feat(core): generate valid yarn.lock for workspaces monorepo
+
+          - Generated from package.json and workspaces configuration
+          - Resolves all dependencies for monorepo structure
+          - Enables proper CI builds with immutable lockfile verification
+          - Fixes empty yarn.lock issue identified by deep-code-reasoning analysis"
+          git push
