@@ -28,14 +28,7 @@ jobs:
           corepack prepare yarn@4.6.0 --activate
           yarn --version
 
-      - name: Clear yarn cache and regenerate lockfile
-        run: |
-          yarn cache clean --all
-          Remove-Item -Path "yarn.lock" -Force -ErrorAction SilentlyContinue
-          Remove-Item -Path "node_modules" -Recurse -Force -ErrorAction SilentlyContinue
-        shell: pwsh
-
-      - name: Install Dependencies (fresh lockfile generation)
+      - name: Install Dependencies (allow lockfile creation)
         run: |
           yarn install
         env:
@@ -152,7 +145,7 @@ jobs:
           - Extensive file exclusion rules for smaller package size
           - Resolved opendal module loading issues
           - Used official Cherry Studio build method
-          - Fixed yarn version compatibility issues
+          - Fixed yarn lockfile creation issue
           
           ## Files
           "@
@@ -200,7 +193,7 @@ jobs:
           Write-Host "   - Added extensive file exclusion rules"
           Write-Host "   - Resolved opendal module loading issues"
           Write-Host "   - Used official Cherry Studio build method"
-          Write-Host "   - Fixed yarn version compatibility issues"
+          Write-Host "   - Fixed yarn lockfile creation issue"
           Write-Host ""
           Write-Host "Ready to use - Cherry Studio should now work without module errors!"
           Write-Host ""
