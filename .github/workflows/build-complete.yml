@@ -32,6 +32,11 @@ jobs:
         run: |
           npm install -g typescript
 
+      - name: Install NSIS
+        run: |
+          choco install nsis -y
+          refreshenv
+
       - name: Clear yarn cache (if needed)
         run: |
           yarn cache clean --all
@@ -48,6 +53,12 @@ jobs:
           node scripts/build-npm.js windows
         env:
           NODE_OPTIONS: --max-old-space-size=8192
+
+      - name: Clean previous builds
+        run: |
+          Remove-Item -Path "dist*" -Recurse -Force -ErrorAction SilentlyContinue
+          Write-Host "Cleaned previous build artifacts"
+        shell: pwsh
 
       - name: Build Application (skip typecheck)
         run: |
@@ -116,19 +127,19 @@ jobs:
           
           # Generate release info
           @"
-          # Cherry Studio - Complete Build with opendal Fix
+          # Cherry Studio - Complete Build (Size Optimized)
           
           **Build Date:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
           **Build ID:** $timestamp
           **Platform:** Windows x64
           **Commit:** ${{ github.sha }}
           
-          ## Fix Applied
-          - Added proper electron-builder.yml configuration
-          - Fixed Windows-specific build scripts
+          ## Optimizations Applied
+          - Fixed recursive build artifact inclusion
+          - Enabled ASAR compression with selective unpacking
+          - Extensive file exclusion rules for smaller package size
           - Resolved opendal module loading issues
-          - Optimized for x64 Windows architecture
-          - Fixed TypeScript compilation issues
+          - Fixed NSIS installer tool availability
           
           ## Files
           "@ | Out-File -FilePath "release\README.md" -Encoding UTF8
@@ -156,16 +167,17 @@ jobs:
           Write-Host ""
           Write-Host "=== CHERRY STUDIO BUILD COMPLETED ==="
           Write-Host ""
-          Write-Host "✅ Complete Cherry Studio with opendal fix has been built successfully!"
+          Write-Host "✅ Complete Cherry Studio with size optimization has been built successfully!"
           Write-Host ""
           Write-Host "📦 Download your application from the Artifacts section above."
           Write-Host ""
           Write-Host "🔧 Fixes Applied:"
-          Write-Host "   - Added electron-builder.yml configuration"
-          Write-Host "   - Fixed Windows build scripts with PowerShell support"
+          Write-Host "   - Fixed recursive build artifact inclusion (was causing 4.2GB+ size)"
+          Write-Host "   - Enabled ASAR compression with selective unpacking"
+          Write-Host "   - Added extensive file exclusion rules"
           Write-Host "   - Resolved opendal module loading issues"
-          Write-Host "   - Fixed TypeScript compilation dependencies"
-          Write-Host "   - Optimized for Windows x64 architecture"
+          Write-Host "   - Fixed NSIS installer tool availability"
+          Write-Host "   - Package size should now be in reasonable range (few hundred MB)"
           Write-Host ""
           Write-Host "🚀 Ready to use - Cherry Studio should now work without module errors!"
           Write-Host ""
