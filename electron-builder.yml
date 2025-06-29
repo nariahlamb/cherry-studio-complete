@@ -8,6 +8,13 @@ electronLanguages:
   - ru
 beforeBuild: null
 npmRebuild: false
+asar: true
+asarUnpack:
+  - "**/node_modules/@opendal/**"
+  - "**/node_modules/libsql/**"
+  - "**/node_modules/**/*.node"
+  - "resources/**"
+  - "**/*.{metal,exp,lib}"
 directories:
   output: dist
   buildResources: build
@@ -49,9 +56,18 @@ files:
   - '!node_modules/mammoth/{mammoth.browser.js,mammoth.browser.min.js}'
   - '!node_modules/selection-hook/prebuilds/**/*' # we rebuild .node, don't use prebuilds
   - '!**/*.{h,iobj,ipdb,tlog,recipe,vcxproj,vcxproj.filters}' # filter .node build files
-asarUnpack:
-  - resources/**
-  - '**/*.{metal,exp,lib}'
+  - '!**/node_modules/**/test/**'
+  - '!**/node_modules/**/tests/**'
+  - '!**/node_modules/**/docs/**'
+  - '!**/node_modules/**/examples/**'
+  - '!**/node_modules/**/*.md'
+  - '!**/node_modules/**/*.txt'
+  - '!**/node_modules/**/LICENSE*'
+  - '!**/node_modules/**/CHANGELOG*'
+  - '!**/node_modules/**/.github/**'
+  - '!**/node_modules/**/.vscode/**'
+  - '!**/node_modules/**/coverage/**'
+  - '!**/node_modules/**/*.map'
 
 # Windows专用配置
 win:
@@ -81,7 +97,19 @@ electronDownload:
   mirror: https://npmmirror.com/mirrors/electron/
 releaseInfo:
   releaseNotes: |
-    Cherry Studio - Complete Build with opendal Fix
+    Cherry Studio - Complete Build with opendal Fix (Optimized Size)
+    
+    🔧 修复内容：
+    - 解决 opendal 模块加载问题
+    - 修复 Windows 构建脚本
+    - 优化包体积（重新启用 ASAR 压缩）
+    - 修复 TypeScript 编译错误
+    
+    📦 包体积优化：
+    - 重新启用 ASAR 压缩
+    - 选择性解包必要的原生模块
+    - 移除不必要的开发文件和文档
+    - 包体积从 1.89GB 优化到合理大小
     
     界面优化：优化多处界面样式，气泡样式改版，自动调整代码预览边栏宽度
     知识库：修复知识库引用不显示问题，修复部分嵌入模型适配问题
