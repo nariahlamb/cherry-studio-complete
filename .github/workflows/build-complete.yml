@@ -32,11 +32,76 @@ jobs:
         run: |
           npm install -g typescript
 
-      - name: Install NSIS (simplified)
+      - name: Install NSIS with comprehensive PATH setup
+        shell: powershell
         run: |
+          Write-Host "=== Installing NSIS ==="
+          
+          # Install NSIS using chocolatey
           choco install nsis -y --force
-          refreshenv
-        shell: cmd
+          
+          Write-Host "Waiting for installation to complete..."
+          Start-Sleep -Seconds 20
+          
+          # Comprehensive NSIS path detection
+          $nsisPaths = @(
+            "C:\Program Files (x86)\NSIS",
+            "C:\Program Files\NSIS", 
+            "C:\ProgramData\chocolatey\lib\nsis\tools",
+            "C:\tools\nsis"
+          )
+          
+          $nsisFound = $false
+          foreach ($path in $nsisPaths) {
+            Write-Host "Checking path: $path"
+            if (Test-Path $path) {
+              $binPath = Join-Path $path "Bin"
+              $makensisPath = Join-Path $path "makensis.exe"
+              $makensisInBin = Join-Path $binPath "makensis.exe"
+              
+              if (Test-Path $makensisInBin) {
+                Write-Host "Found makensis.exe in: $binPath"
+                $env:PATH = "$binPath;$env:PATH"
+                echo "$binPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+                $nsisFound = $true
+                break
+              } elseif (Test-Path $makensisPath) {
+                Write-Host "Found makensis.exe in: $path"
+                $env:PATH = "$path;$env:PATH"
+                echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+                $nsisFound = $true
+                break
+              }
+            }
+          }
+          
+          # If not found in standard locations, search entire system
+          if (-not $nsisFound) {
+            Write-Host "Searching entire system for makensis.exe..."
+            $found = Get-ChildItem -Path "C:\" -Name "makensis.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($found) {
+              $nsisDir = Split-Path $found.FullName
+              Write-Host "Found makensis.exe at: $($found.FullName)"
+              $env:PATH = "$nsisDir;$env:PATH"
+              echo "$nsisDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+              $nsisFound = $true
+            }
+          }
+          
+          # Final verification
+          if ($nsisFound) {
+            $makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
+            if ($makensis) {
+              Write-Host "✓ SUCCESS: NSIS makensis found at: $($makensis.Source)"
+              & makensis /VERSION
+            } else {
+              Write-Host "✗ ERROR: makensis.exe still not accessible"
+              exit 1
+            }
+          } else {
+            Write-Host "✗ FATAL: Could not locate makensis.exe anywhere on system"
+            exit 1
+          }
 
       - name: Clear yarn cache (if needed)
         run: |
@@ -61,6 +126,23 @@ jobs:
           Write-Host "Cleaned previous build artifacts"
         shell: pwsh
 
+      - name: Pre-build NSIS verification
+        shell: powershell
+        run: |
+          Write-Host "=== Pre-build NSIS verification ==="
+          $makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
+          if ($makensis) {
+            Write-Host "✓ NSIS makensis confirmed at: $($makensis.Source)"
+            Write-Host "NSIS Version:"
+            & makensis /VERSION
+            Write-Host "Current PATH contains:"
+            $env:PATH -split ';' | Where-Object { $_ -like '*nsis*' -or $_ -like '*NSIS*' } | ForEach-Object { Write-Host "  $_" }
+          } else {
+            Write-Host "✗ CRITICAL: makensis.exe not found before build"
+            Write-Host "Current PATH: $env:PATH"
+            exit 1
+          }
+
       - name: Build Application (skip typecheck)
         run: |
           yarn build:win:x64:quick
@@ -79,12 +161,15 @@ jobs:
         shell: pwsh
         run: |
           Write-Host "Build output directory contents:"
-          if (Test-Path "dist") {
-            Get-ChildItem -Path "dist" -Recurse | ForEach-Object {
-              Write-Host "  $($_.FullName)"
+          $buildDirs = @("dist-optimized", "dist", "out")
+          foreach ($dir in $buildDirs) {
+            if (Test-Path $dir) {
+              Write-Host "=== Contents of $dir ==="
+              Get-ChildItem -Path $dir -Recurse | ForEach-Object {
+                Write-Host "  $($_.FullName)"
+              }
+              break
             }
-          } else {
-            Write-Host "dist directory not found!"
           }
 
       - name: Organize build artifacts
@@ -93,35 +178,68 @@ jobs:
           New-Item -ItemType Directory -Force -Path "release"
           $timestamp = "${{ steps.timestamp.outputs.timestamp }}"
           
+          # Determine the correct build directory
+          $buildDir = $null
+          $buildDirs = @("dist-optimized", "dist", "out")
+          foreach ($dir in $buildDirs) {
+            if (Test-Path $dir) {
+              $buildDir = $dir
+              Write-Host "Using build directory: $buildDir"
+              break
+            }
+          }
+          
+          if (-not $buildDir) {
+            Write-Host "ERROR: No build directory found!"
+            exit 1
+          }
+          
           # Find and copy setup installer
-          $setupFiles = Get-ChildItem -Path "dist" -Name "*setup*.exe" -ErrorAction SilentlyContinue
+          $setupFiles = Get-ChildItem -Path $buildDir -Name "*setup*.exe" -Recurse -ErrorAction SilentlyContinue
           if ($setupFiles) {
             foreach ($setupFile in $setupFiles) {
+              $sourcePath = Get-ChildItem -Path $buildDir -Name $setupFile -Recurse | Select-Object -First 1
               $newName = "Cherry-Studio-COMPLETE-$timestamp-setup.exe"
-              Copy-Item "dist\$setupFile" "release\$newName"
-              Write-Host "Setup installer: $setupFile -> $newName"
+              Copy-Item $sourcePath.FullName "release\$newName"
+              Write-Host "Setup installer: $($sourcePath.FullName) -> $newName"
             }
           } else {
             Write-Host "No setup installer found"
           }
           
           # Find and copy portable executable
-          $portableFiles = Get-ChildItem -Path "dist" -Name "*portable*.exe" -ErrorAction SilentlyContinue
+          $portableFiles = Get-ChildItem -Path $buildDir -Name "*portable*.exe" -Recurse -ErrorAction SilentlyContinue
           if ($portableFiles) {
             foreach ($portableFile in $portableFiles) {
+              $sourcePath = Get-ChildItem -Path $buildDir -Name $portableFile -Recurse | Select-Object -First 1
               $newName = "Cherry-Studio-COMPLETE-$timestamp-portable.exe"
-              Copy-Item "dist\$portableFile" "release\$newName"
-              Write-Host "Portable executable: $portableFile -> $newName"
+              Copy-Item $sourcePath.FullName "release\$newName"
+              Write-Host "Portable executable: $($sourcePath.FullName) -> $newName"
             }
           } else {
             Write-Host "No portable executable found"
           }
           
+          # Find any .exe files if specific ones not found
+          if (-not $setupFiles -and -not $portableFiles) {
+            $allExeFiles = Get-ChildItem -Path $buildDir -Name "*.exe" -Recurse -ErrorAction SilentlyContinue
+            if ($allExeFiles) {
+              Write-Host "Found general .exe files:"
+              foreach ($exeFile in $allExeFiles) {
+                $sourcePath = Get-ChildItem -Path $buildDir -Name $exeFile -Recurse | Select-Object -First 1
+                $newName = "Cherry-Studio-COMPLETE-$timestamp-$exeFile"
+                Copy-Item $sourcePath.FullName "release\$newName"
+                Write-Host "Executable: $($sourcePath.FullName) -> $newName"
+              }
+            }
+          }
+          
           # Copy any other important files
-          $otherFiles = Get-ChildItem -Path "dist" -Name "*.yml" -ErrorAction SilentlyContinue
+          $otherFiles = Get-ChildItem -Path $buildDir -Name "*.yml" -Recurse -ErrorAction SilentlyContinue
           if ($otherFiles) {
             foreach ($file in $otherFiles) {
-              Copy-Item "dist\$file" "release\$file"
+              $sourcePath = Get-ChildItem -Path $buildDir -Name $file -Recurse | Select-Object -First 1
+              Copy-Item $sourcePath.FullName "release\$file"
               Write-Host "Copied: $file"
             }
           }
@@ -141,7 +259,7 @@ jobs:
           - Added os-proxy-config module to asarUnpack for proper loading
           - Extensive file exclusion rules for smaller package size
           - Resolved opendal module loading issues
-          - Simplified NSIS installer configuration
+          - Fixed NSIS installer tool availability with comprehensive PATH setup
           
           ## Files
           "@ | Out-File -FilePath "release\README.md" -Encoding UTF8
@@ -180,7 +298,7 @@ jobs:
           Write-Host "   - Enabled ASAR compression with selective unpacking"
           Write-Host "   - Added extensive file exclusion rules"
           Write-Host "   - Resolved opendal module loading issues"
-          Write-Host "   - Simplified NSIS installer configuration"
+          Write-Host "   - Fixed NSIS installer tool availability with comprehensive PATH setup"
           Write-Host ""
           Write-Host "🚀 Ready to use - Cherry Studio should now work without module errors!"
           Write-Host ""
