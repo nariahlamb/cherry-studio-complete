@@ -1,4 +1,4 @@
-import { app, shell } from 'electron'
+import { app } from 'electron'
 import { windowService } from './WindowService'
 
 export const CHERRY_STUDIO_PROTOCOL = 'cherry-studio'
