@@ -4,6 +4,8 @@ on:
   workflow_dispatch:
   push:
     branches: [ main ]
+    paths-ignore:
+      - '.github/workflows/generate-lockfile.yml'
 
 permissions:
   contents: write
@@ -22,15 +24,45 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install corepack and setup yarn (version-specific)
+      - name: Install corepack and setup yarn
         run: |
           corepack enable
           corepack prepare yarn@4.6.0 --activate
           yarn --version
 
-      - name: Install Dependencies (standard CI approach)
+      - name: Verify yarn.lock exists and is valid
         run: |
-          yarn install
+          if (Test-Path "yarn.lock") {
+            $lockfileSize = (Get-Item "yarn.lock").Length
+            Write-Host "yarn.lock size: $lockfileSize bytes"
+            if ($lockfileSize -eq 0) {
+              Write-Host "ERROR: yarn.lock is empty. Please run the 'Generate yarn.lock' workflow first."
+              exit 1
+            }
+            Write-Host "✓ Valid yarn.lock found"
+          } else {
+            Write-Host "ERROR: yarn.lock not found. Please run the 'Generate yarn.lock' workflow first."
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
+
+      - name: Cache yarn dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.yarn-cache-dir-path.outputs.dir }}
+            node_modules
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
+
+      - name: Install Dependencies (immutable CI mode)
+        run: |
+          yarn install --immutable
         env:
           NODE_OPTIONS: --max-old-space-size=8192
 
@@ -145,7 +177,7 @@ jobs:
           - Extensive file exclusion rules for smaller package size
           - Resolved opendal module loading issues
           - Used official Cherry Studio build method
-          - Fixed yarn.lock workspaces monorepo issue following deep-code-reasoning analysis
+          - Fixed yarn.lock workspaces monorepo issue with deep-code-reasoning analysis
           
           ## Files
           "@
@@ -181,11 +213,11 @@ jobs:
           Write-Host ""
           Write-Host "=== CHERRY STUDIO BUILD COMPLETED ==="
           Write-Host ""
-          Write-Host "Complete Cherry Studio with size optimization has been built successfully!"
+          Write-Host "✅ Complete Cherry Studio with size optimization has been built successfully!"
           Write-Host ""
-          Write-Host "Download your application from the Artifacts section above."
+          Write-Host "📦 Download your application from the Artifacts section above."
           Write-Host ""
-          Write-Host "Fixes Applied:"
+          Write-Host "🔧 Fixes Applied:"
           Write-Host "   - Fixed recursive build artifact inclusion (was causing 4.2GB+ size)"
           Write-Host "   - Reduced package size from 1.89GB to ~88MB (95%+ reduction)"
           Write-Host "   - Added os-proxy-config module to asarUnpack for proper loading"
@@ -193,7 +225,7 @@ jobs:
           Write-Host "   - Added extensive file exclusion rules"
           Write-Host "   - Resolved opendal module loading issues"
           Write-Host "   - Used official Cherry Studio build method"
-          Write-Host "   - Fixed yarn.lock workspaces monorepo issue following deep-code-reasoning analysis"
+          Write-Host "   - Fixed yarn.lock workspaces monorepo issue with deep-code-reasoning analysis"
           Write-Host ""
-          Write-Host "Ready to use - Cherry Studio should now work without module errors!"
+          Write-Host "🚀 Ready to use - Cherry Studio should now work without module errors!"
           Write-Host ""
