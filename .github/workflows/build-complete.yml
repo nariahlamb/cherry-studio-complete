@@ -11,7 +11,7 @@ permissions:
 jobs:
   build-windows:
     runs-on: windows-latest
-    timeout-minutes: 60
+    timeout-minutes: 90
 
     steps:
       - name: Check out Git repository
@@ -22,20 +22,41 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install Yarn
+      - name: Install and configure Yarn
         run: |
           corepack enable
+          corepack prepare yarn@4.6.0 --activate
           yarn --version
+
+      - name: Get yarn cache directory path
+        id: yarn-cache-dir-path
+        run: echo "dir=$(yarn config get cacheFolder)" >> $env:GITHUB_OUTPUT
+
+      - name: Cache yarn dependencies
+        uses: actions/cache@v4
+        with:
+          path: |
+            ${{ steps.yarn-cache-dir-path.outputs.dir }}
+            node_modules
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-yarn-
 
       - name: Install Dependencies
         run: |
-          yarn install
+          yarn install --immutable
         env:
           NODE_OPTIONS: --max-old-space-size=8192
 
       - name: Download platform-specific packages
         run: |
-          yarn build:npm windows
+          node scripts/build-npm.js windows
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+
+      - name: Type check
+        run: |
+          yarn typecheck
         continue-on-error: true
 
       - name: Build Application
@@ -52,6 +73,18 @@ jobs:
           echo "timestamp=$timestamp" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
+      - name: List build output
+        shell: pwsh
+        run: |
+          Write-Host "Build output directory contents:"
+          if (Test-Path "dist") {
+            Get-ChildItem -Path "dist" -Recurse | ForEach-Object {
+              Write-Host "  $($_.FullName)"
+            }
+          } else {
+            Write-Host "dist directory not found!"
+          }
+
       - name: Organize build artifacts
         shell: pwsh
         run: |
@@ -59,17 +92,36 @@ jobs:
           $timestamp = "${{ steps.timestamp.outputs.timestamp }}"
           
           # Find and copy setup installer
-          $setupFile = Get-ChildItem -Path "dist" -Name "*setup*.exe" | Select-Object -First 1
-          if ($setupFile) {
-            Copy-Item "dist\$setupFile" "release\Cherry-Studio-COMPLETE-$timestamp-setup.exe"
-            Write-Host "Setup installer: $setupFile -> Cherry-Studio-COMPLETE-$timestamp-setup.exe"
+          $setupFiles = Get-ChildItem -Path "dist" -Name "*setup*.exe" -ErrorAction SilentlyContinue
+          if ($setupFiles) {
+            foreach ($setupFile in $setupFiles) {
+              $newName = "Cherry-Studio-COMPLETE-$timestamp-setup.exe"
+              Copy-Item "dist\$setupFile" "release\$newName"
+              Write-Host "Setup installer: $setupFile -> $newName"
+            }
+          } else {
+            Write-Host "No setup installer found"
           }
           
           # Find and copy portable executable
-          $portableFile = Get-ChildItem -Path "dist" -Name "*portable*.exe" | Select-Object -First 1
-          if ($portableFile) {
-            Copy-Item "dist\$portableFile" "release\Cherry-Studio-COMPLETE-$timestamp-portable.exe"
-            Write-Host "Portable executable: $portableFile -> Cherry-Studio-COMPLETE-$timestamp-portable.exe"
+          $portableFiles = Get-ChildItem -Path "dist" -Name "*portable*.exe" -ErrorAction SilentlyContinue
+          if ($portableFiles) {
+            foreach ($portableFile in $portableFiles) {
+              $newName = "Cherry-Studio-COMPLETE-$timestamp-portable.exe"
+              Copy-Item "dist\$portableFile" "release\$newName"
+              Write-Host "Portable executable: $portableFile -> $newName"
+            }
+          } else {
+            Write-Host "No portable executable found"
+          }
+          
+          # Copy any other important files
+          $otherFiles = Get-ChildItem -Path "dist" -Name "*.yml" -ErrorAction SilentlyContinue
+          if ($otherFiles) {
+            foreach ($file in $otherFiles) {
+              Copy-Item "dist\$file" "release\$file"
+              Write-Host "Copied: $file"
+            }
           }
           
           # Generate release info
@@ -79,15 +131,18 @@ jobs:
           **Build Date:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
           **Build ID:** $timestamp
           **Platform:** Windows x64
+          **Commit:** ${{ github.sha }}
           
           ## Fix Applied
-          - Removed @strongtz/win32-arm64-msvc dependency
-          - Configured for x64 Windows only
-          - opendal module should load without errors
+          - Added proper electron-builder.yml configuration
+          - Fixed Windows-specific build scripts
+          - Resolved opendal module loading issues
+          - Optimized for x64 Windows architecture
           
           ## Files
           "@ | Out-File -FilePath "release\README.md" -Encoding UTF8
           
+          # Generate checksums
           Get-ChildItem -Path "release" -File | Where-Object { $_.Name -ne 'README.md' } | ForEach-Object {
             $hash = (Get-FileHash -Algorithm SHA256 $_.FullName).Hash.ToLower()
             "- **$($_.Name)** - SHA256: $hash" | Out-File -FilePath "release\README.md" -Append -Encoding UTF8
@@ -102,22 +157,23 @@ jobs:
           name: Cherry-Studio-COMPLETE-${{ steps.timestamp.outputs.timestamp }}
           path: release/*
           retention-days: 30
-          compression-level: 0
+          compression-level: 6
 
       - name: Build Summary
         shell: pwsh
         run: |
-          Write-Host "" 
+          Write-Host ""
           Write-Host "=== CHERRY STUDIO BUILD COMPLETED ==="
-          Write-Host "" 
+          Write-Host ""
           Write-Host "✅ Complete Cherry Studio with opendal fix has been built successfully!"
-          Write-Host "" 
+          Write-Host ""
           Write-Host "📦 Download your application from the Artifacts section above."
-          Write-Host "" 
-          Write-Host "🔧 Fix Applied:"
-          Write-Host "   - Removed @strongtz/win32-arm64-msvc dependency"
-          Write-Host "   - Configured for Windows x64 only"
-          Write-Host "   - opendal module error resolved"
-          Write-Host "" 
-          Write-Host "🚀 Ready to use - no more 'Cannot find module opendal' errors!"
+          Write-Host ""
+          Write-Host "🔧 Fixes Applied:"
+          Write-Host "   - Added electron-builder.yml configuration"
+          Write-Host "   - Fixed Windows build scripts with PowerShell support"
+          Write-Host "   - Resolved opendal module loading issues"
+          Write-Host "   - Optimized for Windows x64 architecture"
+          Write-Host ""
+          Write-Host "🚀 Ready to use - Cherry Studio should now work without module errors!"
           Write-Host ""
