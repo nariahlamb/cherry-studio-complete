@@ -45,12 +45,12 @@ export function registerIpc() {
   // Test opendal module
   ipcMain.handle('test:opendal', () => {
     try {
-      const opendal = require('opendal')
+      require('opendal')
       console.log('✅ opendal module loaded successfully in main process')
       return { success: true, message: 'opendal module loaded successfully' }
     } catch (error) {
       console.error('❌ Failed to load opendal module:', error)
-      return { success: false, message: error.message }
+      return { success: false, message: (error as Error).message }
     }
   })
 }
