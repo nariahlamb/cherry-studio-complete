@@ -6,7 +6,6 @@ import './bootstrap'
 import '@main/config'
 
 import { electronApp, optimizer } from '@electron-toolkit/utils'
-import { replaceDevtoolsFont } from '@main/utils/windowUtil'
 import { app } from 'electron'
 import installExtension, { REACT_DEVELOPER_TOOLS, REDUX_DEVTOOLS } from 'electron-devtools-installer'
 import Logger from 'electron-log'
@@ -21,7 +20,7 @@ import {
   registerProtocolClient,
   setupAppImageDeepLink
 } from './services/ProtocolClient'
-import selectionService, { initSelectionService } from './services/SelectionService'
+import { initSelectionService } from './services/SelectionService'
 import { registerShortcuts } from './services/ShortcutService'
 import { TrayService } from './services/TrayService'
 import { windowService } from './services/WindowService'
@@ -57,7 +56,7 @@ const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 } else {
-  app.on('second-instance', (event, commandLine, workingDirectory) => {
+  app.on('second-instance', (_, commandLine) => {
     // Someone tried to run a second instance, we should focus our window instead.
     const mainWindow = windowService.getMainWindow()
     if (mainWindow) {
@@ -101,10 +100,6 @@ if (!gotTheLock) {
     }
 
     windowService.createMainWindow()
-
-    if (isDev) {
-      replaceDevtoolsFont()
-    }
 
     initSelectionService()
 
