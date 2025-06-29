@@ -32,7 +32,7 @@ jobs:
         run: |
           npm install -g typescript
 
-      - name: Install NSIS and fix electron-builder cache
+      - name: Install NSIS and configure for electron-builder
         shell: powershell
         run: |
           Write-Host "=== Installing NSIS ==="
@@ -88,32 +88,16 @@ jobs:
           $env:PATH = "$systemNsis;$env:PATH"
           echo "$systemNsis" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
           
-          # Fix electron-builder NSIS cache
-          $electronBuilderCache = "$env:LOCALAPPDATA\electron-builder\Cache\nsis"
-          Write-Host "Checking electron-builder NSIS cache: $electronBuilderCache"
-          
+          # Clear electron-builder cache to force using system NSIS
+          $electronBuilderCache = "$env:LOCALAPPDATA\electron-builder\Cache"
           if (Test-Path $electronBuilderCache) {
-            Write-Host "Found electron-builder NSIS cache, fixing paths..."
-            Get-ChildItem -Path $electronBuilderCache -Directory | ForEach-Object {
-              $cacheNsisDir = $_.FullName
-              $cacheBinDir = Join-Path $cacheNsisDir "Bin"
-              $cacheMakensis = Join-Path $cacheBinDir "makensis.exe"
-              
-              Write-Host "Checking cache NSIS: $cacheMakensis"
-              if (-not (Test-Path $cacheMakensis)) {
-                Write-Host "Fixing missing makensis.exe in cache: $cacheBinDir"
-                if (-not (Test-Path $cacheBinDir)) {
-                  New-Item -ItemType Directory -Path $cacheBinDir -Force | Out-Null
-                }
-                # Copy system makensis to cache
-                $systemMakensis = Join-Path $systemNsis "makensis.exe"
-                if (Test-Path $systemMakensis) {
-                  Copy-Item $systemMakensis $cacheMakensis -Force
-                  Write-Host "Copied system makensis to cache: $cacheMakensis"
-                }
-              }
-            }
+            Write-Host "Clearing electron-builder cache to force system NSIS usage..."
+            Remove-Item -Path $electronBuilderCache -Recurse -Force -ErrorAction SilentlyContinue
           }
+          
+          # Set environment variable to force electron-builder to use system NSIS
+          $env:USE_SYSTEM_NSIS = "true"
+          echo "USE_SYSTEM_NSIS=true" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
           
           # Verify makensis is accessible
           $makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
@@ -163,19 +147,17 @@ jobs:
             exit 1
           }
           
-          # Verify electron-builder cache
-          $electronBuilderCache = "$env:LOCALAPPDATA\electron-builder\Cache\nsis"
+          # Check environment variables
+          Write-Host "Environment variables:"
+          Write-Host "  USE_SYSTEM_NSIS: $env:USE_SYSTEM_NSIS"
+          Write-Host "  PATH (NSIS related): $($env:PATH -split ';' | Where-Object { $_ -like '*nsis*' -or $_ -like '*NSIS*' })"
+          
+          # Verify electron-builder cache is cleared
+          $electronBuilderCache = "$env:LOCALAPPDATA\electron-builder\Cache"
           if (Test-Path $electronBuilderCache) {
-            Write-Host "Electron-builder NSIS cache contents:"
-            Get-ChildItem -Path $electronBuilderCache -Recurse -Name "makensis.exe" | ForEach-Object {
-              $fullPath = Join-Path $electronBuilderCache $_
-              Write-Host "  Cache makensis: $fullPath"
-              if (Test-Path $fullPath) {
-                Write-Host "    Status: EXISTS"
-              } else {
-                Write-Host "    Status: MISSING"
-              }
-            }
+            Write-Host "WARNING: electron-builder cache still exists"
+          } else {
+            Write-Host "SUCCESS: electron-builder cache cleared"
           }
 
       - name: Build Application (skip typecheck)
@@ -184,6 +166,7 @@ jobs:
         env:
           NODE_OPTIONS: --max-old-space-size=8192
           CI: true
+          USE_SYSTEM_NSIS: true
 
       - name: Generate timestamp
         id: timestamp
@@ -294,7 +277,7 @@ jobs:
           - Added os-proxy-config module to asarUnpack for proper loading
           - Extensive file exclusion rules for smaller package size
           - Resolved opendal module loading issues
-          - Fixed NSIS installer tool and electron-builder cache issues
+          - Fixed NSIS installer tool by forcing system NSIS usage
           
           ## Files
           "@
@@ -335,7 +318,7 @@ jobs:
           Write-Host "   - Enabled ASAR compression with selective unpacking"
           Write-Host "   - Added extensive file exclusion rules"
           Write-Host "   - Resolved opendal module loading issues"
-          Write-Host "   - Fixed NSIS installer tool and electron-builder cache issues"
+          Write-Host "   - Fixed NSIS installer tool by forcing system NSIS usage"
           Write-Host ""
           Write-Host "Ready to use - Cherry Studio should now work without module errors!"
           Write-Host ""
