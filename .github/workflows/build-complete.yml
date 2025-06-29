@@ -92,14 +92,14 @@ jobs:
           if ($nsisFound) {
             $makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
             if ($makensis) {
-              Write-Host "✓ SUCCESS: NSIS makensis found at: $($makensis.Source)"
+              Write-Host "SUCCESS: NSIS makensis found at: $($makensis.Source)"
               & makensis /VERSION
             } else {
-              Write-Host "✗ ERROR: makensis.exe still not accessible"
+              Write-Host "ERROR: makensis.exe still not accessible"
               exit 1
             }
           } else {
-            Write-Host "✗ FATAL: Could not locate makensis.exe anywhere on system"
+            Write-Host "FATAL: Could not locate makensis.exe anywhere on system"
             exit 1
           }
 
@@ -132,13 +132,13 @@ jobs:
           Write-Host "=== Pre-build NSIS verification ==="
           $makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
           if ($makensis) {
-            Write-Host "✓ NSIS makensis confirmed at: $($makensis.Source)"
+            Write-Host "NSIS makensis confirmed at: $($makensis.Source)"
             Write-Host "NSIS Version:"
             & makensis /VERSION
             Write-Host "Current PATH contains:"
             $env:PATH -split ';' | Where-Object { $_ -like '*nsis*' -or $_ -like '*NSIS*' } | ForEach-Object { Write-Host "  $_" }
           } else {
-            Write-Host "✗ CRITICAL: makensis.exe not found before build"
+            Write-Host "CRITICAL: makensis.exe not found before build"
             Write-Host "Current PATH: $env:PATH"
             exit 1
           }
@@ -245,7 +245,7 @@ jobs:
           }
           
           # Generate release info
-          @"
+          $releaseInfo = @"
           # Cherry Studio - Complete Build (Size Optimized)
           
           **Build Date:** $(Get-Date -Format 'yyyy-MM-dd HH:mm:ss UTC')
@@ -262,7 +262,9 @@ jobs:
           - Fixed NSIS installer tool availability with comprehensive PATH setup
           
           ## Files
-          "@ | Out-File -FilePath "release\README.md" -Encoding UTF8
+          "@
+          
+          $releaseInfo | Out-File -FilePath "release\README.md" -Encoding UTF8
           
           # Generate checksums
           Get-ChildItem -Path "release" -File | Where-Object { $_.Name -ne 'README.md' } | ForEach-Object {
@@ -287,11 +289,11 @@ jobs:
           Write-Host ""
           Write-Host "=== CHERRY STUDIO BUILD COMPLETED ==="
           Write-Host ""
-          Write-Host "✅ Complete Cherry Studio with size optimization has been built successfully!"
+          Write-Host "Complete Cherry Studio with size optimization has been built successfully!"
           Write-Host ""
-          Write-Host "📦 Download your application from the Artifacts section above."
+          Write-Host "Download your application from the Artifacts section above."
           Write-Host ""
-          Write-Host "🔧 Fixes Applied:"
+          Write-Host "Fixes Applied:"
           Write-Host "   - Fixed recursive build artifact inclusion (was causing 4.2GB+ size)"
           Write-Host "   - Reduced package size from 1.89GB to ~88MB (95%+ reduction)"
           Write-Host "   - Added os-proxy-config module to asarUnpack for proper loading"
@@ -300,5 +302,5 @@ jobs:
           Write-Host "   - Resolved opendal module loading issues"
           Write-Host "   - Fixed NSIS installer tool availability with comprehensive PATH setup"
           Write-Host ""
-          Write-Host "🚀 Ready to use - Cherry Studio should now work without module errors!"
+          Write-Host "Ready to use - Cherry Studio should now work without module errors!"
           Write-Host ""
