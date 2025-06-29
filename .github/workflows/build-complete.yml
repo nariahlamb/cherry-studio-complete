@@ -39,8 +39,9 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-yarn-
 
-      - name: Install Dependencies (official method with immutable fix)
-        run: yarn install --immutable
+      - name: Install Dependencies (force fresh install)
+        run: |
+          yarn install --no-immutable
         env:
           NODE_OPTIONS: --max-old-space-size=8192
 
