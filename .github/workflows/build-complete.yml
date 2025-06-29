@@ -28,6 +28,10 @@ jobs:
           corepack prepare yarn@4.6.0 --activate
           yarn --version
 
+      - name: Install TypeScript globally
+        run: |
+          npm install -g typescript
+
       - name: Clear yarn cache (if needed)
         run: |
           yarn cache clean --all
@@ -129,6 +133,7 @@ jobs:
           - Fixed Windows-specific build scripts
           - Resolved opendal module loading issues
           - Optimized for x64 Windows architecture
+          - Fixed TypeScript compilation issues
           
           ## Files
           "@ | Out-File -FilePath "release\README.md" -Encoding UTF8
@@ -164,6 +169,7 @@ jobs:
           Write-Host "   - Added electron-builder.yml configuration"
           Write-Host "   - Fixed Windows build scripts with PowerShell support"
           Write-Host "   - Resolved opendal module loading issues"
+          Write-Host "   - Fixed TypeScript compilation dependencies"
           Write-Host "   - Optimized for Windows x64 architecture"
           Write-Host ""
           Write-Host "🚀 Ready to use - Cherry Studio should now work without module errors!"
