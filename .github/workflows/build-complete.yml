@@ -32,44 +32,11 @@ jobs:
         run: |
           npm install -g typescript
 
-      - name: Install NSIS and update PATH
-        shell: pwsh
+      - name: Install NSIS (simplified)
         run: |
-          Write-Host "Installing NSIS..."
           choco install nsis -y --force
-          
-          # Wait for installation to complete
-          Start-Sleep -Seconds 10
-          
-          # Find NSIS installation path
-          $nsisPath = Get-ChildItem -Path "C:\Program Files*" -Name "NSIS" -Recurse -Directory -ErrorAction SilentlyContinue | Select-Object -First 1
-          if (-not $nsisPath) {
-            $nsisPath = Get-ChildItem -Path "C:\ProgramData\chocolatey\lib\nsis\tools" -ErrorAction SilentlyContinue | Select-Object -First 1
-          }
-          
-          if ($nsisPath) {
-            $nsisBinPath = Join-Path $nsisPath.FullName "Bin"
-            if (Test-Path $nsisBinPath) {
-              Write-Host "Found NSIS at: $nsisBinPath"
-              # Add to PATH for current session
-              $env:PATH = "$nsisBinPath;$env:PATH"
-              # Add to GitHub Actions PATH
-              echo "$nsisBinPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-            } else {
-              Write-Host "NSIS Bin directory not found at: $nsisBinPath"
-            }
-          } else {
-            Write-Host "NSIS installation directory not found"
-          }
-          
-          # Verify installation
-          $makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
-          if ($makensis) {
-            Write-Host "NSIS makensis found at: $($makensis.Source)"
-          } else {
-            Write-Host "makensis.exe not found in PATH"
-            Write-Host "Current PATH: $env:PATH"
-          }
+          refreshenv
+        shell: cmd
 
       - name: Clear yarn cache (if needed)
         run: |
@@ -93,22 +60,6 @@ jobs:
           Remove-Item -Path "dist*" -Recurse -Force -ErrorAction SilentlyContinue
           Write-Host "Cleaned previous build artifacts"
         shell: pwsh
-
-      - name: Verify NSIS before build
-        shell: pwsh
-        run: |
-          Write-Host "Verifying NSIS installation before build..."
-          $makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
-          if ($makensis) {
-            Write-Host "✓ NSIS makensis found at: $($makensis.Source)"
-            & makensis /VERSION
-          } else {
-            Write-Host "✗ makensis.exe not found in PATH"
-            Write-Host "Current PATH: $env:PATH"
-            Write-Host "Searching for NSIS..."
-            Get-ChildItem -Path "C:\" -Name "makensis.exe" -Recurse -ErrorAction SilentlyContinue | ForEach-Object { Write-Host "Found: $($_.FullName)" }
-            exit 1
-          }
 
       - name: Build Application (skip typecheck)
         run: |
@@ -190,7 +141,7 @@ jobs:
           - Added os-proxy-config module to asarUnpack for proper loading
           - Extensive file exclusion rules for smaller package size
           - Resolved opendal module loading issues
-          - Fixed NSIS installer tool availability with proper PATH configuration
+          - Simplified NSIS installer configuration
           
           ## Files
           "@ | Out-File -FilePath "release\README.md" -Encoding UTF8
@@ -229,7 +180,7 @@ jobs:
           Write-Host "   - Enabled ASAR compression with selective unpacking"
           Write-Host "   - Added extensive file exclusion rules"
           Write-Host "   - Resolved opendal module loading issues"
-          Write-Host "   - Fixed NSIS installer tool availability with proper PATH configuration"
+          Write-Host "   - Simplified NSIS installer configuration"
           Write-Host ""
           Write-Host "🚀 Ready to use - Cherry Studio should now work without module errors!"
           Write-Host ""
