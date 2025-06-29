@@ -8,8 +8,8 @@ permissions:
 
 jobs:
   generate-lockfile:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: windows-latest
+    timeout-minutes: 60
 
     steps:
       - name: Check out Git repository
@@ -20,6 +20,16 @@ jobs:
         with:
           node-version: 20
 
+      - name: Setup Python for native modules
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Visual Studio Build Tools
+        run: |
+          choco install visualstudio2022buildtools --package-parameters "--add Microsoft.VisualStudio.Workload.VCTools --includeRecommended --includeOptional --passive"
+        shell: pwsh
+
       - name: Install corepack and setup yarn
         run: |
           corepack enable
@@ -28,25 +38,35 @@ jobs:
 
       - name: Remove empty yarn.lock
         run: |
-          echo "Current yarn.lock size: $(wc -c < yarn.lock) bytes"
-          rm -f yarn.lock
+          echo "Current yarn.lock size: $(Get-Item 'yarn.lock').Length bytes"
+          Remove-Item "yarn.lock" -Force
           echo "Empty yarn.lock removed"
+        shell: pwsh
 
-      - name: Generate yarn.lock for workspaces (non-CI environment)
+      - name: Set environment for native module builds
+        run: |
+          echo "PYTHON=$env:pythonLocation\python.exe" >> $env:GITHUB_ENV
+          echo "npm_config_python=$env:pythonLocation\python.exe" >> $env:GITHUB_ENV
+          echo "npm_config_msvs_version=2022" >> $env:GITHUB_ENV
+          echo "npm_config_node_gyp=$env:APPDATA\npm\node_modules\node-gyp\bin\node-gyp.js" >> $env:GITHUB_ENV
+        shell: pwsh
+
+      - name: Generate yarn.lock for workspaces (Windows environment)
         run: |
           # Temporarily disable CI detection to allow lockfile generation
-          unset CI
-          unset GITHUB_ACTIONS
-          export CI=false
-          yarn install
+          $env:CI = "false"
+          $env:GITHUB_ACTIONS = $null
+          yarn install --network-timeout 300000
+        shell: pwsh
         env:
           NODE_OPTIONS: --max-old-space-size=8192
 
       - name: Verify generated yarn.lock
         run: |
-          echo "Generated yarn.lock size: $(wc -c < yarn.lock) bytes"
+          echo "Generated yarn.lock size: $(Get-Item 'yarn.lock').Length bytes"
           echo "First 10 lines of yarn.lock:"
-          head -10 yarn.lock
+          Get-Content yarn.lock -Head 10
+        shell: pwsh
 
       - name: Commit and push yarn.lock
         run: |
@@ -56,7 +76,9 @@ jobs:
           git commit -m "feat(core): generate valid yarn.lock for workspaces monorepo
 
           - Generated from package.json and workspaces configuration
-          - Resolves all dependencies for monorepo structure
+          - Resolves all dependencies for monorepo structure  
           - Enables proper CI builds with immutable lockfile verification
-          - Fixes empty yarn.lock issue identified by deep-code-reasoning analysis"
+          - Fixes empty yarn.lock issue identified by deep-code-reasoning analysis
+          - Built on Windows with proper native module support"
           git push
+        shell: pwsh
