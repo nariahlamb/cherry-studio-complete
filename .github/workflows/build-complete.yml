@@ -28,9 +28,22 @@ jobs:
           corepack prepare yarn@4.6.0 --activate
           yarn --version
 
-      - name: Install Dependencies (allow lockfile creation)
+      - name: Fix empty yarn.lock file (deep-code-reasoning solution)
         run: |
-          yarn install
+          Write-Host "Checking yarn.lock file status..."
+          $lockfileSize = (Get-Item "yarn.lock").Length
+          Write-Host "Current yarn.lock size: $lockfileSize bytes"
+          
+          if ($lockfileSize -eq 0) {
+            Write-Host "Empty yarn.lock detected - removing and regenerating..."
+            Remove-Item "yarn.lock" -Force
+            Write-Host "Regenerating yarn.lock for workspaces monorepo..."
+            yarn install
+          } else {
+            Write-Host "Valid yarn.lock found, proceeding with normal install..."
+            yarn install
+          }
+        shell: pwsh
         env:
           NODE_OPTIONS: --max-old-space-size=8192
 
@@ -145,7 +158,7 @@ jobs:
           - Extensive file exclusion rules for smaller package size
           - Resolved opendal module loading issues
           - Used official Cherry Studio build method
-          - Fixed yarn lockfile creation issue
+          - Fixed yarn.lock workspaces monorepo issue with deep-code-reasoning analysis
           
           ## Files
           "@
@@ -193,7 +206,7 @@ jobs:
           Write-Host "   - Added extensive file exclusion rules"
           Write-Host "   - Resolved opendal module loading issues"
           Write-Host "   - Used official Cherry Studio build method"
-          Write-Host "   - Fixed yarn lockfile creation issue"
+          Write-Host "   - Fixed yarn.lock workspaces monorepo issue with deep-code-reasoning analysis"
           Write-Host ""
           Write-Host "Ready to use - Cherry Studio should now work without module errors!"
           Write-Host ""
