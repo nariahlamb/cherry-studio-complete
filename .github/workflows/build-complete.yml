@@ -32,7 +32,7 @@ jobs:
         run: |
           npm install -g typescript
 
-      - name: Install NSIS with comprehensive PATH setup
+      - name: Install NSIS and fix electron-builder cache
         shell: powershell
         run: |
           Write-Host "=== Installing NSIS ==="
@@ -43,15 +43,14 @@ jobs:
           Write-Host "Waiting for installation to complete..."
           Start-Sleep -Seconds 20
           
-          # Comprehensive NSIS path detection
+          # Find system NSIS installation
+          $systemNsis = $null
           $nsisPaths = @(
             "C:\Program Files (x86)\NSIS",
             "C:\Program Files\NSIS", 
-            "C:\ProgramData\chocolatey\lib\nsis\tools",
-            "C:\tools\nsis"
+            "C:\ProgramData\chocolatey\lib\nsis\tools"
           )
           
-          $nsisFound = $false
           foreach ($path in $nsisPaths) {
             Write-Host "Checking path: $path"
             if (Test-Path $path) {
@@ -60,46 +59,69 @@ jobs:
               $makensisInBin = Join-Path $binPath "makensis.exe"
               
               if (Test-Path $makensisInBin) {
-                Write-Host "Found makensis.exe in: $binPath"
-                $env:PATH = "$binPath;$env:PATH"
-                echo "$binPath" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-                $nsisFound = $true
+                $systemNsis = $binPath
+                Write-Host "Found system NSIS at: $systemNsis"
                 break
               } elseif (Test-Path $makensisPath) {
-                Write-Host "Found makensis.exe in: $path"
-                $env:PATH = "$path;$env:PATH"
-                echo "$path" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-                $nsisFound = $true
+                $systemNsis = $path
+                Write-Host "Found system NSIS at: $systemNsis"
                 break
               }
             }
           }
           
-          # If not found in standard locations, search entire system
-          if (-not $nsisFound) {
+          if (-not $systemNsis) {
             Write-Host "Searching entire system for makensis.exe..."
             $found = Get-ChildItem -Path "C:\" -Name "makensis.exe" -Recurse -ErrorAction SilentlyContinue | Select-Object -First 1
             if ($found) {
-              $nsisDir = Split-Path $found.FullName
-              Write-Host "Found makensis.exe at: $($found.FullName)"
-              $env:PATH = "$nsisDir;$env:PATH"
-              echo "$nsisDir" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
-              $nsisFound = $true
+              $systemNsis = Split-Path $found.FullName
+              Write-Host "Found system NSIS at: $systemNsis"
             }
           }
           
-          # Final verification
-          if ($nsisFound) {
-            $makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
-            if ($makensis) {
-              Write-Host "SUCCESS: NSIS makensis found at: $($makensis.Source)"
-              & makensis /VERSION
-            } else {
-              Write-Host "ERROR: makensis.exe still not accessible"
-              exit 1
+          if (-not $systemNsis) {
+            Write-Host "FATAL: Could not locate system NSIS installation"
+            exit 1
+          }
+          
+          # Add system NSIS to PATH
+          $env:PATH = "$systemNsis;$env:PATH"
+          echo "$systemNsis" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          
+          # Fix electron-builder NSIS cache
+          $electronBuilderCache = "$env:LOCALAPPDATA\electron-builder\Cache\nsis"
+          Write-Host "Checking electron-builder NSIS cache: $electronBuilderCache"
+          
+          if (Test-Path $electronBuilderCache) {
+            Write-Host "Found electron-builder NSIS cache, fixing paths..."
+            Get-ChildItem -Path $electronBuilderCache -Directory | ForEach-Object {
+              $cacheNsisDir = $_.FullName
+              $cacheBinDir = Join-Path $cacheNsisDir "Bin"
+              $cacheMakensis = Join-Path $cacheBinDir "makensis.exe"
+              
+              Write-Host "Checking cache NSIS: $cacheMakensis"
+              if (-not (Test-Path $cacheMakensis)) {
+                Write-Host "Fixing missing makensis.exe in cache: $cacheBinDir"
+                if (-not (Test-Path $cacheBinDir)) {
+                  New-Item -ItemType Directory -Path $cacheBinDir -Force | Out-Null
+                }
+                # Copy system makensis to cache
+                $systemMakensis = Join-Path $systemNsis "makensis.exe"
+                if (Test-Path $systemMakensis) {
+                  Copy-Item $systemMakensis $cacheMakensis -Force
+                  Write-Host "Copied system makensis to cache: $cacheMakensis"
+                }
+              }
             }
+          }
+          
+          # Verify makensis is accessible
+          $makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
+          if ($makensis) {
+            Write-Host "SUCCESS: NSIS makensis found at: $($makensis.Source)"
+            & makensis /VERSION
           } else {
-            Write-Host "FATAL: Could not locate makensis.exe anywhere on system"
+            Write-Host "ERROR: makensis.exe still not accessible"
             exit 1
           }
 
@@ -126,21 +148,34 @@ jobs:
           Write-Host "Cleaned previous build artifacts"
         shell: pwsh
 
-      - name: Pre-build NSIS verification
+      - name: Pre-build verification
         shell: powershell
         run: |
-          Write-Host "=== Pre-build NSIS verification ==="
+          Write-Host "=== Pre-build verification ==="
+          
+          # Verify system makensis
           $makensis = Get-Command "makensis.exe" -ErrorAction SilentlyContinue
           if ($makensis) {
-            Write-Host "NSIS makensis confirmed at: $($makensis.Source)"
-            Write-Host "NSIS Version:"
+            Write-Host "System NSIS makensis: $($makensis.Source)"
             & makensis /VERSION
-            Write-Host "Current PATH contains:"
-            $env:PATH -split ';' | Where-Object { $_ -like '*nsis*' -or $_ -like '*NSIS*' } | ForEach-Object { Write-Host "  $_" }
           } else {
-            Write-Host "CRITICAL: makensis.exe not found before build"
-            Write-Host "Current PATH: $env:PATH"
+            Write-Host "ERROR: System makensis not found"
             exit 1
+          }
+          
+          # Verify electron-builder cache
+          $electronBuilderCache = "$env:LOCALAPPDATA\electron-builder\Cache\nsis"
+          if (Test-Path $electronBuilderCache) {
+            Write-Host "Electron-builder NSIS cache contents:"
+            Get-ChildItem -Path $electronBuilderCache -Recurse -Name "makensis.exe" | ForEach-Object {
+              $fullPath = Join-Path $electronBuilderCache $_
+              Write-Host "  Cache makensis: $fullPath"
+              if (Test-Path $fullPath) {
+                Write-Host "    Status: EXISTS"
+              } else {
+                Write-Host "    Status: MISSING"
+              }
+            }
           }
 
       - name: Build Application (skip typecheck)
@@ -259,7 +294,7 @@ jobs:
           - Added os-proxy-config module to asarUnpack for proper loading
           - Extensive file exclusion rules for smaller package size
           - Resolved opendal module loading issues
-          - Fixed NSIS installer tool availability with comprehensive PATH setup
+          - Fixed NSIS installer tool and electron-builder cache issues
           
           ## Files
           "@
@@ -300,7 +335,7 @@ jobs:
           Write-Host "   - Enabled ASAR compression with selective unpacking"
           Write-Host "   - Added extensive file exclusion rules"
           Write-Host "   - Resolved opendal module loading issues"
-          Write-Host "   - Fixed NSIS installer tool availability with comprehensive PATH setup"
+          Write-Host "   - Fixed NSIS installer tool and electron-builder cache issues"
           Write-Host ""
           Write-Host "Ready to use - Cherry Studio should now work without module errors!"
           Write-Host ""
