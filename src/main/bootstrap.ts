@@ -1,4 +1,3 @@
-import { occupiedDirs } from '@shared/config/constant'
 import { app } from 'electron'
 import fs from 'fs'
 import path from 'path'
@@ -20,6 +19,7 @@ function copyOccupiedDirsInMainProcess() {
 
   if (process.platform === 'win32') {
     const appDataPath = app.getPath('userData')
+    const occupiedDirs = ['databases', 'embeddings', 'temp', 'logs']
     occupiedDirs.forEach((dir) => {
       const dirPath = path.join(appDataPath, dir)
       const newDirPath = path.join(newAppDataPath, dir)
