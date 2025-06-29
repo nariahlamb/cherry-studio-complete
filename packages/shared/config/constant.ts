@@ -7,6 +7,20 @@ export const occupiedDirs = [
   'logs'
 ]
 
+export const defaultLanguage = 'en'
+
+export enum UpgradeChannel {
+  STABLE = 'stable',
+  BETA = 'beta',
+  ALPHA = 'alpha'
+}
+
+export const ZOOM_SHORTCUTS = {
+  ZOOM_IN: 'CommandOrControl+Plus',
+  ZOOM_OUT: 'CommandOrControl+-',
+  ZOOM_RESET: 'CommandOrControl+0'
+}
+
 export const APP_CONSTANTS = {
   NAME: 'Cherry Studio',
   PROTOCOL: 'cherry-studio',
