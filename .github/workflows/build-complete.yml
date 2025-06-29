@@ -44,7 +44,7 @@ jobs:
 
       - name: Install Dependencies
         run: |
-          yarn install --immutable
+          yarn install
         env:
           NODE_OPTIONS: --max-old-space-size=8192
 
