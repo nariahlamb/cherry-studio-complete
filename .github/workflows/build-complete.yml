@@ -22,26 +22,22 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install corepack (official method)
-        run: corepack enable && corepack prepare yarn@4.6.0 --activate
-
-      - name: Get yarn cache directory path
-        id: yarn-cache-dir-path
-        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
-
-      - name: Cache yarn dependencies
-        uses: actions/cache@v4
-        with:
-          path: |
-            ${{ steps.yarn-cache-dir-path.outputs.dir }}
-            node_modules
-          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-yarn-
-
-      - name: Install Dependencies (force fresh install)
+      - name: Install corepack and setup yarn (version-specific)
         run: |
-          yarn install --no-immutable
+          corepack enable
+          corepack prepare yarn@4.6.0 --activate
+          yarn --version
+
+      - name: Clear yarn cache and regenerate lockfile
+        run: |
+          yarn cache clean --all
+          Remove-Item -Path "yarn.lock" -Force -ErrorAction SilentlyContinue
+          Remove-Item -Path "node_modules" -Recurse -Force -ErrorAction SilentlyContinue
+        shell: pwsh
+
+      - name: Install Dependencies (fresh lockfile generation)
+        run: |
+          yarn install
         env:
           NODE_OPTIONS: --max-old-space-size=8192
 
@@ -156,6 +152,7 @@ jobs:
           - Extensive file exclusion rules for smaller package size
           - Resolved opendal module loading issues
           - Used official Cherry Studio build method
+          - Fixed yarn version compatibility issues
           
           ## Files
           "@
@@ -203,6 +200,7 @@ jobs:
           Write-Host "   - Added extensive file exclusion rules"
           Write-Host "   - Resolved opendal module loading issues"
           Write-Host "   - Used official Cherry Studio build method"
+          Write-Host "   - Fixed yarn version compatibility issues"
           Write-Host ""
           Write-Host "Ready to use - Cherry Studio should now work without module errors!"
           Write-Host ""
