@@ -1,0 +1,98 @@
+name: Generate yarn.lock (Efficient)
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  generate-lockfile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Check out Git repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install corepack and setup yarn
+        run: |
+          corepack enable
+          corepack prepare yarn@4.6.0 --activate
+          yarn --version
+
+      - name: Remove empty yarn.lock
+        run: |
+          echo "Current yarn.lock size: $(wc -c < yarn.lock) bytes"
+          rm -f yarn.lock
+          echo "Empty yarn.lock removed"
+
+      - name: Create .yarnrc.yml to skip problematic builds
+        run: |
+          cat > .yarnrc.yml << 'EOF'
+          nodeLinker: node-modules
+          enableGlobalCache: false
+          supportedArchitectures:
+            os: ["linux", "win32", "darwin"]
+            cpu: ["x64", "arm64"]
+          packageExtensions:
+            "selection-hook@*":
+              dependencies:
+                node-gyp: "*"
+              peerDependencies:
+                node-gyp: "*"
+          EOF
+
+      - name: Generate yarn.lock with skip-builds for problematic packages
+        run: |
+          # Temporarily disable CI detection and skip native builds
+          unset CI
+          unset GITHUB_ACTIONS
+          export CI=false
+          export npm_config_build_from_source=false
+          export ELECTRON_SKIP_BINARY_DOWNLOAD=1
+          
+          # Install with skipping problematic native modules
+          yarn install --mode=skip-build --network-timeout 300000
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Fix yarn.lock for native modules (post-process)
+        run: |
+          # Re-enable builds only for essential modules and regenerate
+          export CI=false
+          yarn install --network-timeout 300000
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Verify generated yarn.lock
+        run: |
+          echo "Generated yarn.lock size: $(wc -c < yarn.lock) bytes"
+          echo "First 20 lines of yarn.lock:"
+          head -20 yarn.lock
+          echo "..."
+          echo "Last 10 lines of yarn.lock:"
+          tail -10 yarn.lock
+
+      - name: Clean up temporary files
+        run: |
+          rm -f .yarnrc.yml
+
+      - name: Commit and push yarn.lock
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          git add yarn.lock
+          git commit -m "feat(core): generate valid yarn.lock for workspaces monorepo (efficient method)
+
+          - Generated using efficient CI approach without heavy build tools
+          - Skipped problematic native module builds during initial resolution
+          - Resolves all dependencies for monorepo structure
+          - Enables proper CI builds with immutable lockfile verification
+          - Fixes empty yarn.lock issue identified by deep-code-reasoning analysis"
+          git push
